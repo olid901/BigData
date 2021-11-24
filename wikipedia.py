@@ -47,7 +47,7 @@ class DatabaseHandler:
         self._cursor.execute(f"INSERT OR IGNORE INTO Revision (timestamp, text_len, contributor_id, page_id) VALUES("
                              f" '{revision.timestamp}',"
                              f" {revision.text_len},"
-                             f"{revision.contributor_id if revision.contributor_id else -1},"
+                             f"{revision.contributor.id if revision.contributor.id else -1},"
                              f" {revision.page_id})")
 
 
@@ -58,9 +58,9 @@ class Contributor:
 
 
 class Revision:
-    def __init__(self, revision_id, contributor_id, timestamp, text_len, page_id):
+    def __init__(self, revision_id, contributor, timestamp, text_len, page_id):
         self.id = revision_id
-        self.contributor_id = contributor_id
+        self.contributor_id = contributor
         self.timestamp = timestamp
         self.text_len = text_len
         self.page_id = page_id
@@ -195,7 +195,7 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
             self._revisions_object_buffer.append(
                 Revision(
                     self._revision_values['id'],
-                    self._contributor_object_buffer.id,
+                    self._contributor_object_buffer,
                     self._revision_values['timestamp'].strip().replace("\n", "").replace("Z", ""),
                     len(self._revision_values['text']),
                     self._page_values['id'])
@@ -217,6 +217,10 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
             if self.HistoryPages[-1].title.replace(" ", "_").strip() in politician_list:
                 print("Found a politician!")
                 print(self.HistoryPages[-1].title)
+                for rev in self.HistoryPage[-1].revisions:
+                    DB_handler.insert_contributor(rev.contributor)
+                    DB_handler.insert_revision(rev)
+                DB_handler.insert_page(self.HistoryPages[-1])
             else:
                 print("No politician (",self.HistoryPages[-1].title,")")
 
@@ -244,7 +248,6 @@ parser.setContentHandler(handler)
 my_file = open("article_list.txt", "rt", encoding='utf-8')
 politician_list = my_file.read().splitlines()
 
-print(politician_list)
 
 for i, line in enumerate(
         subprocess.Popen(['bzcat'], stdin=open("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2"),
