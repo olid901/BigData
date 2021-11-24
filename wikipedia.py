@@ -4,6 +4,8 @@ import time
 import sqlite3
 import subprocess
 import xml.sax
+from time import time
+from multiprocessing import Process, Queue
 
 dump_url = "https://dumps.wikimedia.org/dewiki/20211101/"
 base_url = "https://dumps.wikimedia.org"
@@ -224,7 +226,26 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
             else:
                 print("No politician (",self.HistoryPages[-1].title,")")
 
+# Worker process method for concurrent XML parsing
+def dump_wikipedia_worker(queue: Queue):
+    while not queue.empty():
+        filename = queue.get()
+        print("Got: " + filename)
 
+        # Content handler for Wiki XML
+        handler = WikiXmlHandler()
+
+        # Parsing object
+        parser = xml.sax.make_parser()
+        parser.setContentHandler(handler)
+
+        for i, line in enumerate(
+        subprocess.Popen(['bzcat'], stdin=open(filename), stdout=subprocess.PIPE).stdout):
+            parser.feed(line)
+
+        DB_handler.commit()
+
+        queue.task_done()
 
 # Code to get all .bz2 files
 '''
@@ -234,31 +255,40 @@ soup_dump = BeautifulSoup(dump_html, 'html.parser')  # Find list elements with t
 bz2_files = [x.get('href') for x in soup_dump.find_all('a') if
              "dewiki-20211101-pages-meta-history" in x.get('href') and x.get('href')[-4:] == ".bz2"]
 '''
-
-# Content handler for Wiki XML
-handler = WikiXmlHandler()
-
+# According to SQLite3 docs, the library is capable of multiprocessing,
+# which means, we share it between all processes
+# TODO: Wäre es ggf. schöner, wenn wir nicht einfach so auf des Ding aus dem nichts zugreifen
+#       sondern den vlt. der Methode mit übergeben? -> Prüfen, ob das Probleme macht
 DB_handler = DatabaseHandler()
 DB_handler.create_database_tables()
-
-# Parsing object
-parser = xml.sax.make_parser()
-parser.setContentHandler(handler)
 
 my_file = open("article_list.txt", "rt", encoding='utf-8')
 politician_list = my_file.read().splitlines()
 
+start = time()
 
-for i, line in enumerate(
-        subprocess.Popen(['bzcat'], stdin=open("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2"),
-                         stdout=subprocess.PIPE).stdout):
-    parser.feed(line)
+file_queue = Queue(maxsize=0)
+# TODO: Change number of processes based on user dialog or command argument
+num_threads = 4
 
-    #if i > 100000:
-    #    break
+# TODO: Read all files in 'files' directory and put every file into the queue
+file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2")
+file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1599p3235.bz2")
+file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p3236p5184.bz2")
+file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p5185p6214.bz2")
 
-DB_handler.commit()
+for i in range(num_threads):
+    worker = Process(target=dump_wikipedia_worker, args=(file_queue,))
+    worker.start()
 
-for x in handler.HistoryPages:
-    if x.title in politician_list or x.title.replace(" ", "_") in politician_list or x.title.replace(" ", "_").strip() in politician_list or x.title.replace("(Politiker)","").replace(" ", "_").strip() in politician_list:
-        print(x.title)
+# TODO: This part is broken currently, find out how to fix or delete 
+# for x in handler.HistoryPages:
+#     if x.title in politician_list or x.title.replace(" ", "_") in politician_list or x.title.replace(" ", "_").strip() in politician_list or x.title.replace("(Politiker)","").replace(" ", "_").strip() in politician_list:
+#         print(x.title)
+
+# Wait for every element in the queue to be finished
+file_queue.join()
+
+finish = time.time()
+
+print("Duration: " + str((finish - start) / 60) + " seconds")
