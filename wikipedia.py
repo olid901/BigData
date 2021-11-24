@@ -217,7 +217,7 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
             if self.HistoryPages[-1].title.replace(" ", "_").strip() in politician_list:
                 print("Found a politician!")
                 print(self.HistoryPages[-1].title)
-                for rev in self.HistoryPage[-1].revisions:
+                for rev in self.HistoryPages[-1].revisions:
                     DB_handler.insert_contributor(rev.contributor)
                     DB_handler.insert_revision(rev)
                 DB_handler.insert_page(self.HistoryPages[-1])
