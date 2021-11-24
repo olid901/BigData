@@ -1,5 +1,6 @@
 import requests  # Library for parsing HTML
 from bs4 import BeautifulSoup
+import time
 
 dump_url = "https://dumps.wikimedia.org/dewiki/20211101/"
 base_url = "https://dumps.wikimedia.org"
@@ -8,11 +9,16 @@ import xml.sax
 
 
 class Revision:
-    def __init__(self, contributor_id, timestamp, text_len):
+    def __init__(self, revision_id, contributor_id, timestamp, text_len):
+        self.id = revision_id
         self.contributor_id = contributor_id
         self.timestamp = timestamp
         self.text_len = text_len
-
+    def __str__(self):
+        return f" \
+        timestamp: {self.timestamp}\n \
+        id: {self.contributor_id}\n \
+        text_len: {self.text_len}\n"
 
 class HistoryPage:
 
@@ -28,7 +34,8 @@ class HistoryPage:
         revisions: \n"
 
         for r in self.revisions:
-            s += f"  - contrib_id: {r.contributor_id}\n" \
+            s += "revision: \n"\
+                 f"  - contrib_id: {r.contributor_id}\n" \
                  f"  - timestamp: {r.timestamp}\n" \
                  f"  - text_len: {r.text_len}\n"
 
@@ -45,24 +52,24 @@ class HistoryPage:
 '''
 
 
-# TODO: Refactor: Use A String to Indicate the current position in the Tree Diagram instead of booleans
-
+# known Problems: Usernames of contributors get saved together with the contrib_id, timestamp has actual time and random numbers in it
 # TODO: Mein Kopf tut weh
 class WikiXmlHandler(xml.sax.handler.ContentHandler):
     """Content handler for Wiki XML data using SAX"""
 
     def __init__(self):
         xml.sax.handler.ContentHandler.__init__(self)
-        self._page_buffer = None
-        self._revision_buffer = None
-        self._contributor_buffer = None
+        self._in_tag = None
+        # buffers (storing all data from needed tags)
+        self._page_buffer = []
+        self._revision_buffer = []
+        self._contributor_buffer = []
+        # values (storing all data fields that are needed for a tag)
         self._page_values = {}
         self._contributor_values = {}
         self._revision_values = {}
+        # current tag
         self._current_tag = None
-        self._in_page = False
-        self._in_revision = False
-        self._in_contributor = False
 
         self._contributor_id_buffer = None
         self._revisions_object_buffer = []
@@ -71,72 +78,70 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
 
     def characters(self, content):
         """Characters between opening and closing tags"""
-        if self._in_page and not self._in_revision and not self._in_contributor:
+        if self._in_tag == "page":
             if self._current_tag:
                 self._page_buffer.append(content)
-        if self._in_revision and not self._in_contributor:
+        elif self._in_tag == "revision":
             if self._current_tag:
-                # print("revision_content: ", content)
-                self._revision_buffer.append(content)
-        if self._in_contributor:
-            # print("Contributor content: ", content)
+                if self._current_tag == "timestamp" and content.strip() != "":
+                    self._revision_buffer.append(content)
+                else:
+                    self._revision_buffer.append(content)
+        elif self._in_tag == "contributor":
             if self._current_tag:
                 self._contributor_buffer.append(content)
 
     def startElement(self, name, attrs):
         """Opening tag of element"""
-        # self._current_tag = name
 
         if name == "page":
-            print("entered PAGE tag")
             self._page_buffer = []
-            self._in_page = True
-            self._in_revision = False
-            self._in_contributor = False
+            self._in_tag = "page"
 
         if name == "revision":
-            self._in_revision = True
-            self._in_contributor = False
+            self._in_tag = "revision"
             self._revision_buffer = []
 
         if name == "contributor":
-            self._in_contributor = True
+            self._in_tag = "contributor"
             self._contributor_buffer = []
 
         if name in ('title', 'text', 'timestamp', 'id', 'contributor'):
             self._current_tag = name
+        else:
+            self._current_tag = None
 
     def endElement(self, name):
         """Closing tag of element"""
         if name == self._current_tag:
-            #print("End of Tag: ", name)
-            if self._in_contributor:
+            if self._in_tag == "contributor":
                 self._contributor_values[name] = ' '.join(self._contributor_buffer)
+                self._contributor_buffer = []
 
-            elif self._in_revision:
+            elif self._in_tag == "revision":
                 self._revision_values[name] = ' '.join(self._revision_buffer)
+                self._revision_buffer = []
 
-            elif self._in_page:
+            elif self._in_tag == "page":
                 self._page_values[name] = ' '.join(self._page_buffer)
+                self._page_buffer = []
 
         if name == 'contributor':
-            self._in_contributor = False
-            self._in_revision = True
-            self._contributor_id_buffer = self._contributor_values['id']
-        #            print("Out of CONTRIBUTOR tag")
+            self._in_tag = "revision"
+            self._contributor_id_buffer = self._contributor_values['id'].strip().replace("\n", "") if 'id' in self._contributor_values else None
+            self._contributor_values = {}
 
         if name == 'revision':
-            self._in_revision = False
-            self._in_page = True
+            self._in_tag = "page"
             self._revisions_object_buffer.append(
-                Revision(self._contributor_id_buffer, self._revision_values['timestamp'],
+                Revision(self._revision_values['id'], self._contributor_id_buffer, self._revision_values['timestamp'].strip().replace("\n", ""),
                          len(self._revision_values['text'])))
-        #            print("Out of REVISION tag")
 
         if name == 'page':
-            self._in_page = False
+            self._in_tag = None
             self.HistoryPages.append(
                 HistoryPage(self._page_values['id'], self._page_values['title'], self._revisions_object_buffer))
+            self._page_values = {}
 
 
 # Code to get all .bz2 files
@@ -158,10 +163,12 @@ parser.setContentHandler(handler)
 for i, line in enumerate(
         subprocess.Popen(['bzcat'], stdin=open("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2"),
                          stdout=subprocess.PIPE).stdout):
-    # print(line)
-    parser.feed(line)
-    if handler.HistoryPages:
-        break
 
+    parser.feed(line)
+
+    #if i > 1000:
+        #break
 for x in handler.HistoryPages:
-    print(x)
+    print(x.title)
+
+
