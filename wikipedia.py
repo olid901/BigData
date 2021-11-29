@@ -235,7 +235,11 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
 # Worker process method for concurrent XML parsing
 def dump_wikipedia_worker(queue: JoinableQueue):
     while not queue.empty():
-        filename = queue.get()
+        
+        # Setting a timeout as a security measure
+        # If I understood the docs correctly, there is a possibility that empty() returns something
+        # wrong, therefore freezing get(), because its waiting indefinitely until it gets something new
+        filename = queue.get(timeout=5)
         print("Got: " + filename)
 
         # Content handler for Wiki XML
