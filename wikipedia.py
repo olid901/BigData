@@ -10,6 +10,60 @@ from multiprocessing import Process, Queue
 dump_url = "https://dumps.wikimedia.org/dewiki/20211101/"
 base_url = "https://dumps.wikimedia.org"
 
+class Contributor:
+    def __init__(self, contrib_id, name):
+        self.id = contrib_id
+        self.name = name
+
+
+class Revision:
+    def __init__(self, revision_id, contributor: Contributor, timestamp, text_len, page_id):
+        self.id = revision_id
+        self.contributor = contributor
+        self.timestamp = timestamp
+        self.text_len = text_len
+        self.page_id = page_id
+
+    def __str__(self):
+        return f" \
+        timestamp: {self.timestamp}\n \
+        id: {self.id}\n \
+        text_len: {self.text_len}\n"
+
+
+class HistoryPage:
+
+    def __init__(self, page_id, title, revisions, text):
+        self.text = text
+        self.revisions = revisions
+        self.title = title
+        self.id = page_id
+
+    def __str__(self):
+        s = f" \
+        title: {self.title}\n \
+        id: {self.id}\n \
+        revisions: \n"
+
+        for r in self.revisions:
+            s += "revision: \n" \
+                 f"  - contrib_id: {r.contributor.id}\n" \
+                 f"  - timestamp: {r.timestamp}\n" \
+                 f"  - text_len: {r.text_len}\n"
+
+        return s
+
+
+''' Tree Diagram:
+
+        n pages ----------------> n revisions
+        |---> id                    |---> id
+        |---> title                 |---> text_len (after edit)
+                                    |---> timestamp
+                                    |---> contributor
+                                            |---> id
+                                            |---> name
+'''
 
 class DatabaseHandler:
     def __init__(self):
@@ -37,15 +91,18 @@ class DatabaseHandler:
                              "FOREIGN KEY (contributor_id) REFERENCES Contributor(id),"
                              "FOREIGN KEY (page_id) REFERENCES Page(id))")
 
-    def insert_contributor(self, contributor):
+    def insert_contributor(self, contributor: Contributor):
         if contributor.id is not None and contributor.name is not None:
+            print("Inserting Contributor: " + contributor.name)
             self._cursor.execute(
                 f"""INSERT OR IGNORE INTO Contributor VALUES({contributor.id}, '{contributor.name.replace("'", "''") if contributor.name else "null"}')""")
 
-    def insert_page(self, page):
+    def insert_page(self, page: HistoryPage):
+        print("Inserting Page: " + page.title)
         self._cursor.execute(f"INSERT INTO Page VALUES({page.id}, '{page.title}')")
 
-    def insert_revision(self, revision):
+    def insert_revision(self, revision: Revision):
+        print("inserting Revision: ", revision.id)
         self._cursor.execute(f"INSERT OR IGNORE INTO Revision (timestamp, text_len, contributor_id, page_id) VALUES("
                              f" '{revision.timestamp}',"
                              f" {revision.text_len},"
@@ -53,60 +110,7 @@ class DatabaseHandler:
                              f" {revision.page_id})")
 
 
-class Contributor:
-    def __init__(self, contrib_id, name):
-        self.id = contrib_id
-        self.name = name
 
-
-class Revision:
-    def __init__(self, revision_id, contributor, timestamp, text_len, page_id):
-        self.id = revision_id
-        self.contributor_id = contributor
-        self.timestamp = timestamp
-        self.text_len = text_len
-        self.page_id = page_id
-
-    def __str__(self):
-        return f" \
-        timestamp: {self.timestamp}\n \
-        id: {self.contributor_id}\n \
-        text_len: {self.text_len}\n"
-
-
-class HistoryPage:
-
-    def __init__(self, page_id, title, revisions, text):
-        self.text = text
-        self.revisions = revisions
-        self.title = title
-        self.id = page_id
-
-    def __str__(self):
-        s = f" \
-        title: {self.title}\n \
-        id: {self.id}\n \
-        revisions: \n"
-
-        for r in self.revisions:
-            s += "revision: \n" \
-                 f"  - contrib_id: {r.contributor_id}\n" \
-                 f"  - timestamp: {r.timestamp}\n" \
-                 f"  - text_len: {r.text_len}\n"
-
-        return s
-
-
-''' Tree Diagram:
-
-        n pages ----------------> n revisions
-        |---> id                    |---> id
-        |---> title                 |---> text_len (after edit)
-                                    |---> timestamp
-                                    |---> contributor
-                                            |---> id
-                                            |---> name
-'''
 
 
 class WikiXmlHandler(xml.sax.handler.ContentHandler):
@@ -269,7 +273,7 @@ start = time()
 
 file_queue = Queue(maxsize=0)
 # TODO: Change number of processes based on user dialog or command argument
-num_threads = 4
+num_threads = 1
 
 # TODO: Read all files in 'files' directory and put every file into the queue
 file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2")
