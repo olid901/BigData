@@ -5,7 +5,9 @@ import sqlite3
 import subprocess
 import xml.sax
 from time import time
-from multiprocessing import Process, Queue
+from multiprocessing import Process, JoinableQueue
+from os import listdir
+from os.path import isfile, join
 
 dump_url = "https://dumps.wikimedia.org/dewiki/20211101/"
 base_url = "https://dumps.wikimedia.org"
@@ -231,7 +233,7 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
                 print("No politician (",self.HistoryPages[-1].title,")")
 
 # Worker process method for concurrent XML parsing
-def dump_wikipedia_worker(queue: Queue):
+def dump_wikipedia_worker(queue: JoinableQueue):
     while not queue.empty():
         filename = queue.get()
         print("Got: " + filename)
@@ -271,15 +273,20 @@ politician_list = my_file.read().splitlines()
 
 start = time()
 
-file_queue = Queue(maxsize=0)
+file_queue = JoinableQueue(maxsize=0)
 # TODO: Change number of processes based on user dialog or command argument
 num_threads = 1
 
 # TODO: Read all files in 'files' directory and put every file into the queue
-file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2")
-file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1599p3235.bz2")
-file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p3236p5184.bz2")
-file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p5185p6214.bz2")
+file_path = "./files/"
+file_list = ["./files/" + f for f in listdir(file_path) if isfile(join(file_path, f))]
+
+for file in file_list:
+    file_queue.put(file)
+
+# print(file_list)
+
+# exit(0)
 
 for i in range(num_threads):
     worker = Process(target=dump_wikipedia_worker, args=(file_queue,))
