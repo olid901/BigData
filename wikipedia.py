@@ -73,7 +73,6 @@ class HistoryPage:
 
 class DatabaseHandler:
     def __init__(self):
-        # TODO: rename back to articles.db. For some reason I can't name it that way right now, I get an Error when trying to create articles.db File
         self._connection = sqlite3.connect("articles.db", timeout=5)
         self._cursor = self._connection.cursor()
 
@@ -286,18 +285,9 @@ def dump_wikipedia_worker(queue: JoinableQueue, sql_queue: Queue):
 
 
 def end_program_when_done(file_queue: JoinableQueue, sql_queue: Queue, db_handler: DatabaseHandler):
-    start = time()
     # Wait for every element in the queue to be finished
     file_queue.join()
-    # There may still be SQL Queries in the Queue that need to be executed (multiple thousand commands can queue up in there)
-    while not sql_queue.empty():
-        pass
-    print("committing ...")
-    # TODO: On my latest test, the Database was empty after the script finished!
-    db_handler.commit()
-    print("committed!")
-    finish = time()
-    print("Duration: " + str((finish - start)) + " seconds")
+
 
 
 # TODO: Make this more failsafe, maybe by looking at the text: Does ist contain or Link "Politiker"
@@ -349,8 +339,8 @@ def main():
         worker.start()
 
     # This needs to be a separate process, as file_queue.join() would block main Thread and we need to execute the sql commands here
-    worker = Process(target=end_program_when_done, args=(file_queue, sql_queue, DB_handler))
-    worker.start()
+    end_script_worker = Process(target=end_program_when_done, args=(file_queue, sql_queue, DB_handler))
+    end_script_worker.start()
 
     # Check for sql Queries ind Queue and execute
     while True:
@@ -358,6 +348,12 @@ def main():
             command = sql_queue.get(timeout=5)
             if command is not None:
                 DB_handler.execute_command(command)
+        else:
+            if not end_script_worker.is_alive():
+                print("c...")
+                DB_handler.commit()
+                print("c!")
+                exit(1)
 
     # TODO: This part is broken currently, find out how to fix or delete
     # for x in handler.HistoryPages:
@@ -366,4 +362,7 @@ def main():
 
 
 if __name__ == "__main__":
+    start = time()
     main()
+    finish = time()
+    print("Duration:"+str((finish - start)//60)+":"+str((start-finish)%60)+"min")
