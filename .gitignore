@@ -3,3 +3,4 @@ venv/
 venv_64bit/
 linux_venv/
 files/
+*.db

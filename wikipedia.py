@@ -1,19 +1,11 @@
-from multiprocessing import Queue
-
-import requests  # Library for parsing HTML
-from bs4 import BeautifulSoup
-import time
 import sqlite3
 import subprocess
 import xml.sax
 from time import time, sleep
-from multiprocessing import Process, JoinableQueue
+from multiprocessing import Queue, Process, JoinableQueue
 from os import listdir
 from os.path import isfile, join
 import json
-
-dump_url = "https://dumps.wikimedia.org/dewiki/20211101/"
-base_url = "https://dumps.wikimedia.org"
 
 
 class Contributor:
@@ -116,7 +108,7 @@ class DatabaseHandler:
 
     @staticmethod
     def insert_revision_command(revision: Revision):
-        return f"INSERT OR IGNORE INTO Revision (timestamp, text_len, contributor_id, page_id) VALUES(" \
+        return f"INSERT INTO Revision (timestamp, text_len, contributor_id, page_id) VALUES(" \
                f" '{revision.timestamp}'," \
                f" {revision.text_len}," \
                f"{revision.contributor.id if revision.contributor.id else 'null'}," \
@@ -167,10 +159,11 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
     def characters(self, content):
         """Characters between opening and closing tags"""
 
-        # I AM SPEED: If an article is surely not a politician (does NOT imply it is a politician!), dont write anything to buffers
+        # I AM SPEED: If an article is surely not a politician (does NOT imply it is a politician!), dont write
+        # anything to buffers when processing the page
         if self._in_tag == "page" and self._current_tag == "title" and content.strip().replace("\n", "") != "":
             if content.replace(" ", "_").strip() not in self._politician_dict:
-                print("This is not a politician: ", content)
+                #print("This is not a politician: ", content)
                 self._performance_skip = True
             else:
                 print("This could be a politician: ", content)
@@ -249,6 +242,7 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
                         self._page_values['id'])
                 )
                 self._latest_text = self._revision_values['text']
+                self._revision_values = {}
 
             if name == 'page':
                 self._in_tag = None
@@ -259,16 +253,16 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
                                                               self._latest_text)
 
                 self._page_values = {}
+                self._revisions_object_buffer = []
 
                 if is_politician(self._HistoryPage_object_buffer):
-                    print("Found a politician!")
-                    print(self._HistoryPage_object_buffer.title)
+                    #print("Found a politician: ",self._HistoryPage_object_buffer.title)
+                    #print(self._HistoryPage_object_buffer.title)
+                    self._sql_queue.put(DatabaseHandler.insert_page_command(self._HistoryPage_object_buffer))
                     for rev in self._HistoryPage_object_buffer.revisions:
                         self._sql_queue.put(DatabaseHandler.insert_contributor_command(rev.contributor))
                         self._sql_queue.put(DatabaseHandler.insert_revision_command(rev))
-                    self._sql_queue.put(DatabaseHandler.insert_page_command(self._HistoryPage_object_buffer))
-                else:
-                    print("No politician (", self._HistoryPage_object_buffer.title, ")")
+                self._HistoryPage_object_buffer = None
 
 
 # Worker process method for concurrent XML parsing
@@ -306,8 +300,11 @@ def end_program_when_done(file_queue: JoinableQueue, sql_queue: Queue, db_handle
 # The 1st step is already done in the parser. The 2nd step is here:
 def is_politician(page: HistoryPage):
     if "[[Politiker]]" in page.text:
-        print("This is a politician: ", page.title)
+        print("This is in fact a politician: ", page.title)
         return True
+    else:
+        print("This only seemed to be a politician: ",page.title)
+        return False
 
 
 # According to SQLite3 docs, the library is capable of multiprocessing,
@@ -323,14 +320,14 @@ def main():
     # TODO: Change number of processes based on user dialog or command argument
     num_threads = 1
 
-    file_path = "./files/"
-    file_list = ["./files/" + f for f in listdir(file_path) if isfile(join(file_path, f))]
+    #file_path = "./files/"
+    #file_list = ["./files/" + f for f in listdir(file_path) if isfile(join(file_path, f))]
 
-    for file in file_list:
-        file_queue.put(file)
+    #for file in file_list:
+    #    file_queue.put(file)
 
     # For Debugging
-    # file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2")
+    file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2")
 
     for i in range(num_threads):
         worker = Process(target=dump_wikipedia_worker, args=(file_queue, sql_queue,))
@@ -359,4 +356,4 @@ if __name__ == "__main__":
     start = time()
     main()
     finish = time()
-    print("Duration: " + str((finish - start) // 3600) + ":" + str((finish - start) // 60) + ":" + str((start - finish) % 60) + "s")
+    print("Duration: " + str(int((finish - start) // 3600)) + ":" + str(int((finish - start) % 60)) + ":" + str(int((start - finish) % 60)) + "s")

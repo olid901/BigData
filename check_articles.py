@@ -1,27 +1,13 @@
 import sqlite3
-import requests
 import json
 
 # Handy python script to check  if there is a wikipedia article for a politician
 
-cnt = 0
-
-def count_in_list(list, item):
-    global cnt
-    cnt += 1
-    if cnt%10 == 0:
-        print(cnt)
-
-    count = 0
-    for x in list:
-        if x == item:
-            count += 1
-    return count
 
 def main():
     connection = sqlite3.connect("politicians.db")
     cursor = connection.cursor()
-    
+
     # We already have (almost) all politicians in our politicians database
     # In this case, we only need the first and last name
     cursor.execute("SELECT DISTINCT id, first_name, last_name FROM politicians ORDER BY first_name, last_name ASC")
@@ -38,13 +24,12 @@ def main():
     list_file = my_file.read().splitlines()
     articles = set(list_file)
 
-    matches = {int(key):val for key, val in politicians.items() if val in articles}
+    matches = {int(key): val for key, val in politicians.items() if val in articles}
 
     print("Politicians: " + str(len(politicians)))
     print("Matches: " + str(len(matches)))
 
     # in rev_multidict werden alle Einträge gespeichert, deren values (Vor und Nachname) in Matches mehrmals vorkommt
-    # StackOverflow sei Dank!
     rev_multidict = {}
     for key, value in matches.items():
         rev_multidict.setdefault(value, set()).add(key)
@@ -61,12 +46,11 @@ def main():
     print("Politicians after duplicate removal: ", len(matches))
 
     # Flip key and values: We need the Name as key, as we will never search this json by a politicianID, but in by name
-    flipped = dict((v,k) for k,v in matches.items())
+    flipped = dict((v, k) for k, v in matches.items())
 
     with open("article_list.json", "w", encoding="utf-8") as json_file:
         json.dump(flipped, json_file)
 
 
 if __name__ == '__main__':
-
     main()
