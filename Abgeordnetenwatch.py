@@ -1,7 +1,7 @@
 import requests
 import json
 import sqlite3
-import time
+
 
 
 def get_parliaments_to_database(cursor):

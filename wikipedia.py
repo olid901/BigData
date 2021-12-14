@@ -317,16 +317,16 @@ def main():
     file_queue = JoinableQueue(maxsize=0)
     sql_queue = Queue(maxsize=0)
     # TODO: Change number of processes based on user dialog or command argument
-    num_threads = 1
+    num_threads = 6
 
-    #file_path = "./files/"
-    #file_list = ["./files/" + f for f in listdir(file_path) if isfile(join(file_path, f))]
+    file_path = "./files/"
+    file_list = ["./files/" + f for f in listdir(file_path) if isfile(join(file_path, f))]
 
-    #for file in file_list:
-    #    file_queue.put(file)
+    for file in file_list:
+        file_queue.put(file)
 
     # For Debugging
-    file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2")
+    #file_queue.put("files/dewiki-20211001-pages-meta-history1.xml-p1p1598.bz2")
 
     for i in range(num_threads):
         worker = Process(target=dump_wikipedia_worker, args=(file_queue, sql_queue,))
