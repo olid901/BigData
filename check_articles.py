@@ -9,7 +9,7 @@ def main():
     cursor = connection.cursor()
 
     # We already have (almost) all politicians in our politicians database
-    # In this case, we only need the first and last name
+    # In this case, we only need the id, first and last name
     cursor.execute("SELECT DISTINCT id, first_name, last_name FROM politicians ORDER BY first_name, last_name ASC")
     res = cursor.fetchall()
 
@@ -27,7 +27,7 @@ def main():
     matches = {int(key): val for key, val in politicians.items() if val in articles}
 
     print("Politicians: " + str(len(politicians)))
-    print("Matches: " + str(len(matches)))
+    print("Matching Articles: " + str(len(matches)))
 
     # in rev_multidict werden alle Einträge gespeichert, deren values (Vor und Nachname) in Matches mehrmals vorkommt
     rev_multidict = {}
@@ -36,14 +36,14 @@ def main():
     dup_list = [value for key, value in rev_multidict.items() if len(value) > 1]
 
     # Problem: There are politicians with the same Name but (obviously) different IDs.
-    # It cant be determined which politician the wikipedia page refers to, there it's impossible to know which politicianID to map to the article.
+    # It cant be determined which politician the wikipedia page refers to, therefore it's impossible to know which politicianID to map to the article.
     # So it is better to remove them and have consistent Data, where every wikipedia page refers to one politicianID
     for id_set in dup_list:
         for id in id_set:
             if id in matches:
                 del matches[id]
 
-    print("Politicians after duplicate removal: ", len(matches))
+    print("Matching Articles after duplicate removal: ", len(matches))
 
     # Flip key and values: We need the Name as key, as we will never search this json by a politicianID, but in by name
     flipped = dict((v, k) for k, v in matches.items())

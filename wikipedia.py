@@ -67,6 +67,7 @@ class HistoryPage:
 
 
 class DatabaseHandler:
+
     def __init__(self):
         self._connection = sqlite3.connect("politicians.db", timeout=5)
         self._cursor = self._connection.cursor()
@@ -98,7 +99,7 @@ class DatabaseHandler:
     def insert_contributor_command(contributor: Contributor):
         if contributor.id is not None and contributor.name is not None:
             # replace: escape "'" in SQL-Query
-            return f"""INSERT OR IGNORE INTO Contributor VALUES({contributor.id}, '{contributor.name.replace("'", "''")}')"""
+            return f"""INSERT OR IGNORE INTO Contributor VALUES({contributor.id}, '{contributor.name.replace("'", "''")}') """
         else:
             return None
 
@@ -161,9 +162,9 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
 
         # I AM SPEED: If an article is surely not a politician (does NOT imply it is a politician!), dont write
         # anything to buffers when processing the page
+        # Politician Check Stage 1: This only needs the title of the currently processed article
         if self._in_tag == "page" and self._current_tag == "title" and content.strip().replace("\n", "") != "":
             if content.replace(" ", "_").strip() not in self._politician_dict:
-                #print("This is not a politician: ", content)
                 self._performance_skip = True
             else:
                 print("This could be a politician: ", content)
@@ -256,8 +257,6 @@ class WikiXmlHandler(xml.sax.handler.ContentHandler):
                 self._revisions_object_buffer = []
 
                 if is_politician(self._HistoryPage_object_buffer):
-                    #print("Found a politician: ",self._HistoryPage_object_buffer.title)
-                    #print(self._HistoryPage_object_buffer.title)
                     self._sql_queue.put(DatabaseHandler.insert_page_command(self._HistoryPage_object_buffer))
                     for rev in self._HistoryPage_object_buffer.revisions:
                         self._sql_queue.put(DatabaseHandler.insert_contributor_command(rev.contributor))
@@ -303,7 +302,7 @@ def is_politician(page: HistoryPage):
         print("This is in fact a politician: ", page.title)
         return True
     else:
-        print("This only seemed to be a politician: ",page.title)
+        print("This only seemed to be a politician: ", page.title)
         return False
 
 
@@ -349,7 +348,7 @@ def main():
                 print("committing...")
                 db_handler.commit()
                 print("committed!")
-                return
+                break
 
 
 if __name__ == "__main__":

@@ -46,7 +46,6 @@ def get_parliament_periods_to_database(cursor):
         cursor.execute(insert_command)
 
 
-# TODO
 def get_mandates_and_candidacies_to_database(cursor):
     create_mandates_table = "CREATE TABLE IF NOT EXISTS mandates (" \
                             "id INTEGER UNIQUE PRIMARY KEY," \
@@ -57,7 +56,7 @@ def get_mandates_and_candidacies_to_database(cursor):
                             "FOREIGN KEY (parliament_period_id) REFERENCES parliament_periods(id)," \
                             "FOREIGN KEY (politician_id) REFERENCES politician(id)" \
                             ")"
-    cursor.execute("DROP TABLE mandates")
+    #cursor.execute("DROP TABLE mandates")
     cursor.execute(create_mandates_table)
 
     create_candidacies_table = "CREATE TABLE IF NOT EXISTS candidacies (" \
@@ -71,13 +70,13 @@ def get_mandates_and_candidacies_to_database(cursor):
                                "FOREIGN KEY (politician_id) REFERENCES politician(id)," \
                                "FOREIGN KEY (party_id) REFERENCES parties(id)" \
                                ")"
-    cursor.execute("DROP TABLE candidacies")
+    #cursor.execute("DROP TABLE candidacies")
     cursor.execute(create_candidacies_table)
 
     # Es gibt ~53k Mandate und Kandidaturen, daher range (55)
     for page in range(55):
         url = f"https://www.abgeordnetenwatch.de/api/v2/candidacies-mandates?page=%d&pager_limit=1000" % page
-        time.sleep(31)
+        #time.sleep(31)
         print("page:%d" % page)
         response = requests.get(url)
         json_data = json.loads(response.content.decode("ASCII"))
@@ -186,9 +185,9 @@ def main():
     cursor = connection.cursor()
     get_parliaments_to_database(cursor)
     get_parliament_periods_to_database(cursor)
-    get_mandates_and_candidacies_to_database(cursor)
     get_parties_to_database(cursor)
     get_politicians_to_database(cursor)
+    get_mandates_and_candidacies_to_database(cursor)
     # write changes to DB
     connection.commit()
 
